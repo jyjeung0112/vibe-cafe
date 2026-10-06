@@ -11,11 +11,26 @@
 // [Supabase 설정]
 // 아래 상수에 본인의 Supabase 프로젝트 URL과 anon 키를 직접 입력해주세요.
 // ==========================================
-const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // 예: 'https://xxxxxxxxxxxx.supabase.co'
-const SUPABASE_KEY = 'YOUR_SUPABASE_KEY'; // 예: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+const SUPABASE_URL = 'https://iwxxzrvpvqtjlhvgwihh.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3eHh6cnZwdnF0amxodmd3aWhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMzY5MjEsImV4cCI6MjEwNjgxMjkyMX0.Mx06ETi3HNjBG6e_MaUVIgygGOzHNOTo5gChrbCqV8Q'
 
 // Supabase 클라이언트 초기화 (요청하신 변수명: supabaseClient)
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// URL과 Key가 올바른 형태일 때만 안전하게 클라이언트를 생성하여,
+// URL 미입력 시에도 금액 계산과 주문서 UI가 멈추지 않도록 방어 코드를 적용합니다.
+let supabaseClient = null;
+try {
+    if (typeof supabase !== 'undefined' && 
+        SUPABASE_URL && 
+        SUPABASE_URL.startsWith('http') && 
+        SUPABASE_KEY && 
+        SUPABASE_KEY !== 'YOUR_SUPABASE_KEY') {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } else {
+        console.warn('⚠️ Supabase URL과 Key가 아직 기본값입니다. script.js 상단에 실제 Supabase 프로젝트 정보를 입력해주세요.');
+    }
+} catch (error) {
+    console.error('Supabase 클라이언트 초기화 오류:', error);
+}
 
 // HTML 문서가 완전히 준비되면 스크립트를 실행합니다.
 document.addEventListener('DOMContentLoaded', () => {
@@ -333,19 +348,30 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = '주문 저장 중...';
 
         try {
-            // Supabase의 cafe_menu03 테이블에 주문 데이터 INSERT
-            const { data, error } = await supabaseClient
-                .from('cafe_menu03')
-                .insert([orderData])
-                .select();
+            let savedId = orderIdCounter++;
 
-            // 에러 발생 시 catch 블록으로 이동
-            if (error) {
-                throw error;
+            // Supabase 클라이언트가 정상 설정된 경우 DB에 저장 시도
+            if (supabaseClient) {
+                // Supabase의 cafe_menu03 테이블에 주문 데이터 INSERT
+                const { data, error } = await supabaseClient
+                    .from('cafe_menu03')
+                    .insert([orderData])
+                    .select();
+
+                // 에러 발생 시 catch 블록으로 이동
+                if (error) {
+                    throw error;
+                }
+
+                // DB에서 발급된 id가 있으면 주문번호로 사용
+                if (data && data[0] && data[0].id) {
+                    savedId = data[0].id;
+                }
+            } else {
+                console.warn('⚠️ Supabase URL/Key가 아직 설정되지 않아 로컬 내역에만 저장됩니다. DB 저장을 원하시면 script.js 상단에 실제 Supabase 정보를 입력해주세요.');
             }
 
             // [성공 1] 로컬 orders 배열에 추가하여 주문 내역 탭에서도 즉시 확인 가능하게 함
-            const savedId = (data && data[0] && data[0].id) ? data[0].id : orderIdCounter++;
             const newOrder = {
                 orderId: savedId,
                 name: customerName,
